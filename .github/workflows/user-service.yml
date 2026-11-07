@@ -1,0 +1,31 @@
+name: user-service
+
+on:
+  pull_request:
+    paths:
+      - 'user-service/**'
+      - 'pom.xml'
+      - '.dockerignore'
+      - '.github/workflows/user-service.yml'
+      - '.github/workflows/service.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'user-service/**'
+      - 'pom.xml'
+      - '.dockerignore'
+      - '.github/workflows/user-service.yml'
+      - '.github/workflows/service.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  service:
+    uses: ./.github/workflows/service.yml
+    with:
+      service: user-service
+      dokploy-app-id: ${{ vars.DOKPLOY_USER_SERVICE_APP_ID }}
+    secrets:
+      dokploy-api-key: ${{ secrets.DOKPLOY_API_KEY }}

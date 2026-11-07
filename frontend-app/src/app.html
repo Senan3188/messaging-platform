@@ -1,0 +1,175 @@
+<div class="ambient"></div>
+@if (loading()) {
+  <main class="boot">
+    <img src="relay.svg" alt="" width="56" height="56">
+    <p role="status">Opening Relay…</p>
+  </main>
+} @else if (profile(); as user) {
+  <main class="workspace" [class.chat-open]="active()">
+    <header class="app-header">
+      <div class="brand">
+        <img src="relay.svg" alt="" width="38" height="38">
+        <span>Relay<span class="brand-divider"></span><small>MESSAGES</small></span>
+      </div>
+      <div class="account">
+        <div class="avatar account-avatar">{{ initials(user.displayName) }}</div>
+        <span class="account-name">{{ user.displayName }}</span>
+        <button type="button" class="text-button copy" (click)="copyId()">{{ copied() ? 'Copied!' : 'Copy my ID' }}</button>
+        <button type="button" class="text-button" (click)="signOut()" [disabled]="leaving()">Sign out</button>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Conversations">
+      <div class="rail-heading">
+        <div><p class="eyebrow">YOUR INBOX</p><h1>Chats</h1></div>
+        <button type="button" class="new-chat" (click)="addingContact.set(!addingContact()); notice.set('')"
+                [attr.aria-expanded]="addingContact()" aria-controls="new-chat-form">
+          <span aria-hidden="true">+</span> New chat
+        </button>
+      </div>
+      @if (addingContact()) {
+        <form class="add-contact" id="new-chat-form" (ngSubmit)="openConversation()">
+          <label for="recipient">Recipient’s contact ID</label>
+          <div>
+            <input id="recipient" name="recipient" [(ngModel)]="recipient" maxlength="255"
+                   placeholder="Paste a contact ID" required>
+            <button type="submit" class="primary compact" [disabled]="opening() || !recipient.trim()">
+              {{ opening() ? 'Opening…' : 'Open' }}
+            </button>
+          </div>
+          <p>Ask your contact to share their ID from Relay.</p>
+        </form>
+      }
+      <label class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        <input aria-label="Search conversations" placeholder="Search chats" [ngModel]="search()"
+               (ngModelChange)="search.set($event)">
+      </label>
+      @if (notice() && (!active() || addingContact())) {
+        <p class="rail-notice" role="status">{{ notice() }}</p>
+      }
+      <div class="chat-list">
+        @for (chat of visibleConversations(); track chat.id) {
+          <button type="button" class="chat-row" [class.selected]="active()?.id === chat.id"
+                  [attr.aria-current]="active()?.id === chat.id ? 'true' : null" (click)="select(chat)">
+            <span class="avatar">{{ initials(chat.recipientSubject) }}</span>
+            <span class="chat-label"><strong>{{ contact(chat.recipientSubject) }}</strong><small>Direct conversation</small></span>
+            <span class="chat-date">{{ chat.createdAt | date:'MMM d' }}</span>
+          </button>
+        } @empty {
+          <p class="empty-list">{{ search() ? 'No chats match your search.' : 'Your conversations will appear here.' }}</p>
+        }
+      </div>
+    </aside>
+
+    @if (active(); as chat) {
+      <section class="chat-pane" aria-label="Active conversation">
+        <header class="chat-header">
+          <button class="icon-button back" type="button" aria-label="Back to chats" (click)="back()" [disabled]="sending()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+          </button>
+          <span class="avatar">{{ initials(chat.recipientSubject) }}</span>
+          <div class="chat-heading"><h2>{{ contact(chat.recipientSubject) }}</h2><p>Direct conversation</p></div>
+        </header>
+        <div class="timeline texture" #timeline aria-label="Messages" tabindex="0">
+          @if (chatLoading()) {
+            <p class="message-marker" role="status">Loading conversation…</p>
+          } @else {
+            @if (older()) {
+              <button type="button" class="message-marker earlier" (click)="loadOlder()" [disabled]="olderLoading()">
+                {{ olderLoading() ? 'Loading…' : 'Load earlier messages' }}
+              </button>
+            }
+            @for (message of messages(); track message.id; let index = $index) {
+              @if (index === 0 || (messages()[index - 1].createdAt | date:'yyyy-MM-dd') !== (message.createdAt | date:'yyyy-MM-dd')) {
+                <p class="message-marker">{{ message.createdAt | date:'EEEE, MMM d' }}</p>
+              }
+              <div class="bubble" [class.outgoing]="mine(message)">
+                <div class="message-body">{{ message.body }}</div>
+                <span class="message-time">{{ message.createdAt | date:'shortTime' }} @if (mine(message)) { <span aria-label="Sent">✓</span> }</span>
+              </div>
+            } @empty {
+              <p class="message-marker">This is the start of your conversation.</p>
+            }
+          }
+        </div>
+        @if (notice() && !addingContact()) { <p class="chat-notice" role="status">{{ notice() }}</p> }
+        <form class="composer" (ngSubmit)="send()">
+          <textarea aria-label="Message" name="draft" rows="1" [(ngModel)]="draft" maxlength="4000"
+                    placeholder="Type a message" [disabled]="leaving()"></textarea>
+          <button type="submit" class="send" aria-label="Send message" title="Send message"
+                  [disabled]="sending() || leaving() || !draft.trim()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8-3-8Z"/><path d="M7 12h9"/></svg>
+          </button>
+        </form>
+      </section>
+    } @else {
+      <section class="chat-pane empty-chat texture" aria-label="Chat welcome">
+        <div class="empty-card">
+          <div class="welcome-icon"><img src="relay.svg" alt="" width="58" height="58"></div>
+          <p class="eyebrow">RELAY MESSENGER</p>
+          <h2>Good to see you.</h2>
+          <p>Choose a conversation or start a new chat with someone’s contact ID.</p>
+          <button type="button" class="primary" (click)="addingContact.set(true)">Start a conversation <span aria-hidden="true">→</span></button>
+        </div>
+      </section>
+    }
+  </main>
+} @else {
+  <main class="auth-page">
+    <div class="auth-top brand">
+      <img src="relay.svg" alt="" width="44" height="44">
+      <span>Relay<span class="brand-divider"></span><small>MESSENGER</small></span>
+    </div>
+    <section class="auth-card" aria-label="Relay account">
+      <div class="auth-form">
+        @switch (authMode()) {
+          @case ('signup') {
+            <p class="eyebrow">GET STARTED</p>
+            <h1>Create your account</h1>
+            <p class="intro">We’ll send you a link to verify your address and set your password.</p>
+            <form (ngSubmit)="register()" #signup="ngForm">
+              <div class="name-fields">
+                <label>First name<input name="firstName" autocomplete="given-name" [(ngModel)]="firstName" required maxlength="80"></label>
+                <label>Last name<input name="lastName" autocomplete="family-name" [(ngModel)]="lastName" required maxlength="80"></label>
+              </div>
+              <label>Email address<input type="email" name="email" autocomplete="email" [(ngModel)]="email" required email maxlength="254" placeholder="you@example.com"></label>
+              @if (authError()) { <p class="error" role="alert">{{ authError() }}</p> }
+              <button type="submit" class="primary full" [disabled]="signup.invalid || registering()">
+                {{ registering() ? 'Submitting…' : 'Create account' }} <span aria-hidden="true">→</span>
+              </button>
+            </form>
+            <p class="switch-auth">Already have an account? <button type="button" (click)="setAuthMode('signin')">Sign in</button></p>
+          }
+          @case ('sent') {
+            <p class="eyebrow">ACCOUNT SETUP</p>
+            <h1>Check your inbox</h1>
+            <p class="intro">If you can register with <strong>{{ email }}</strong>, you’ll receive a setup link. Open it to verify your email and choose a password.</p>
+            <a class="primary full" href="/api/auth/login">Continue to sign in <span aria-hidden="true">→</span></a>
+            <p class="switch-auth"><button type="button" (click)="setAuthMode('signup')">Use a different email</button></p>
+          }
+          @default {
+            <p class="eyebrow">WELCOME TO RELAY</p>
+            <h1>Your conversations<br>start here.</h1>
+            <p class="intro">Sign in to pick up a conversation or start one with someone new.</p>
+            @if (authError()) { <p class="error" role="alert">{{ authError() }}</p> }
+            <a class="primary full" href="/api/auth/login">Sign in <span aria-hidden="true">→</span></a>
+            <p class="switch-auth">New to Relay? <button type="button" (click)="setAuthMode('signup')">Create an account</button></p>
+          }
+        }
+      </div>
+      <div class="auth-art texture" aria-hidden="true">
+        <div class="preview-chat">
+          <header><div class="avatar">R</div><div><strong>Relay</strong><small>A little closer</small></div></header>
+          <div class="preview-bubbles">
+            <div class="bubble">Hey, are you around? <span class="message-time">10:42</span></div>
+            <div class="bubble outgoing">Always up for a chat. <span class="message-time">10:43 ✓</span></div>
+            <div class="bubble">Good to hear from you. <span class="message-time">10:43</span></div>
+          </div>
+        </div>
+        <p>A familiar space for everyday conversations.</p>
+      </div>
+    </section>
+    <footer>RELAY <span></span> YOUR CONVERSATIONS, IN ONE PLACE</footer>
+  </main>
+}

@@ -1,0 +1,28 @@
+server:
+  port: ${SERVER_PORT:8082}
+spring:
+  application:
+    name: messaging-service
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
+          jwk-set-uri: ${OIDC_JWK_SET_URI}
+          audiences: ${OIDC_AUDIENCE:messaging-platform}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+app:
+  users:
+    base-url: ${USER_SERVICE_BASE_URL}

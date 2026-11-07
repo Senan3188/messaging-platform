@@ -1,0 +1,30 @@
+server:
+  port: ${SERVER_PORT:8081}
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
+          jwk-set-uri: ${OIDC_JWK_SET_URI}
+          audiences: ${OIDC_AUDIENCE:messaging-platform}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+app:
+  keycloak:
+    admin-base-url: ${KEYCLOAK_ADMIN_BASE_URL}
+    realm: ${KEYCLOAK_REALM:messaging}
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:user-provisioner}
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}

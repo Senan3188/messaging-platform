@@ -1,0 +1,136 @@
+x-oidc-env: &oidc-env
+  OIDC_ISSUER_URI: http://localhost:8080/realms/messaging
+  OIDC_JWK_SET_URI: http://keycloak:8080/realms/messaging/protocol/openid-connect/certs
+
+services:
+  keycloak-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in .env}
+    volumes:
+      - keycloak-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  profile-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: profiles
+      POSTGRES_USER: profiles
+      POSTGRES_PASSWORD: ${PROFILE_DB_PASSWORD:?Set PROFILE_DB_PASSWORD in .env}
+    volumes:
+      - profile-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profiles -d profiles"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  messaging-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: messages
+      POSTGRES_USER: messages
+      POSTGRES_PASSWORD: ${MESSAGING_DB_PASSWORD:?Set MESSAGING_DB_PASSWORD in .env}
+    volumes:
+      - messaging-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messages -d messages"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: http://localhost:8080
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in .env}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?Set KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET in .env}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infrastructure/keycloak/messaging-realm.json:/opt/keycloak/data/import/messaging-realm.json:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    environment:
+      <<: *oidc-env
+      DATABASE_URL: jdbc:postgresql://profile-db:5432/profiles
+      DATABASE_USER: profiles
+      DATABASE_PASSWORD: ${PROFILE_DB_PASSWORD:?Set PROFILE_DB_PASSWORD in .env}
+      KEYCLOAK_ADMIN_BASE_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET in .env}
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      profile-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  messaging-service:
+    build:
+      context: .
+      dockerfile: messaging-service/Dockerfile
+    environment:
+      <<: *oidc-env
+      DATABASE_URL: jdbc:postgresql://messaging-db:5432/messages
+      DATABASE_USER: messages
+      DATABASE_PASSWORD: ${MESSAGING_DB_PASSWORD:?Set MESSAGING_DB_PASSWORD in .env}
+      USER_SERVICE_BASE_URL: http://user-service:8081
+    depends_on:
+      messaging-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8082:8082"
+
+  realtime-gateway:
+    build:
+      context: .
+      dockerfile: realtime-gateway/Dockerfile
+    environment: *oidc-env
+    ports:
+      - "127.0.0.1:8083:8083"
+
+  frontend-app:
+    build: ./frontend-app
+    environment:
+      APP_ORIGIN: http://localhost:3000
+      OIDC_ISSUER_URI: http://localhost:8080/realms/messaging
+      OIDC_BACKCHANNEL_URI: http://keycloak:8080/realms/messaging
+      USER_SERVICE_BASE_URL: http://user-service:8081
+      MESSAGING_SERVICE_BASE_URL: http://messaging-service:8082
+      COOKIE_ENCRYPTION_KEY: ${FRONTEND_COOKIE_KEY:?Set FRONTEND_COOKIE_KEY in .env}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - user-service
+      - messaging-service
+
+volumes:
+  keycloak-db:
+  profile-db:
+  messaging-db:

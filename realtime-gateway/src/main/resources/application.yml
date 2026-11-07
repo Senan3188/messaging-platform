@@ -1,0 +1,17 @@
+server:
+  port: ${SERVER_PORT:8083}
+spring:
+  application:
+    name: realtime-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
+          jwk-set-uri: ${OIDC_JWK_SET_URI}
+          audiences: ${OIDC_AUDIENCE:messaging-platform}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
